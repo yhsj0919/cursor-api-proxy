@@ -238,6 +238,9 @@ export function resolveAcpModelConfigValue(
   availableModels: AcpAvailableModel[] | undefined,
   aliases: readonly string[] = [],
 ): string {
+  // Cursor CLI exposes this as `auto` / `Auto`, while ACP represents automatic
+  // model selection by leaving the session model at its default.
+  if (displayName.trim().toLowerCase() === "auto") return "default[]";
   if (!availableModels?.length) return displayName;
   const candidates = new Set(
     [displayName, ...aliases]
@@ -488,7 +491,8 @@ export function runAcpSync(
           if (
             resolvedModelId === "default[]" &&
             opts.strictModel &&
-            opts.model !== "default"
+            opts.model !== "default" &&
+            opts.model.toLowerCase() !== "auto"
           ) {
             throw new Error(
               `ACP model catalog has no match for ${JSON.stringify(opts.model)}`,
@@ -520,7 +524,9 @@ export function runAcpSync(
           debugAcp("ACP sync: no content accumulated; stderr tail: %s", stderr.slice(-500));
         }
         finish(0);
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        stderr = stderr.trim() ? `${stderr.trim()}\n${message}` : message;
         if (timeout) clearTimeout(timeout);
         if (!resolved) {
           finish(1);
@@ -698,7 +704,8 @@ export function runAcpStream(
           if (
             resolvedModelId === "default[]" &&
             opts.strictModel &&
-            opts.model !== "default"
+            opts.model !== "default" &&
+            opts.model.toLowerCase() !== "auto"
           ) {
             throw new Error(
               `ACP model catalog has no match for ${JSON.stringify(opts.model)}`,
@@ -727,7 +734,9 @@ export function runAcpStream(
           prompt: [{ type: "text", text: prompt }],
         }, pending, requestTimeoutMs);
         finish(0);
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        stderr = stderr.trim() ? `${stderr.trim()}\n${message}` : message;
         if (timeout) clearTimeout(timeout);
         if (!resolved) {
           finish(1);

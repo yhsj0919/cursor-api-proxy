@@ -141,9 +141,9 @@ function envContextExtra(env: EnvSource): string | undefined {
 }
 
 function normalizeModelId(raw: string | undefined): string {
-  if (!raw) return "default";
+  if (!raw) return "auto";
   const parts = raw.split("/");
-  return parts[parts.length - 1] || "default";
+  return parts[parts.length - 1] || "auto";
 }
 
 function resolveAbsolutePath(

@@ -256,6 +256,7 @@ export class AcpToolSession {
       }
     }
     if (!resolved) {
+      if (candidates[0]?.trim().toLowerCase() === "auto") return;
       if (this.#opts.strictModel) {
         throw new Error(
           `ACP model catalog has no match for ${JSON.stringify(candidates[0])}`,

@@ -2,6 +2,8 @@
 
 OpenAI-compatible proxy for Cursor CLI. Run it on localhost and point any LLM client (OpenAI SDK, LiteLLM, LangChain, etc.) at it like a normal chat API.
 
+Windows 中文说明：[docs/WINDOWS-中文使用指南.md](docs/WINDOWS-中文使用指南.md)
+
 One npm package, two uses: import it as an SDK, or run the CLI to start the server. Same behavior either way.
 
 This is not the Cursor IDE. The HTTP API will not attach your repo, `@codebase`, or host shell the way the desktop app does. See [Local workspace and agent frameworks](#local-workspace-and-agent-frameworks).
@@ -252,6 +254,33 @@ catalog. Explicit variants can be retargeted, and `-fast` is preserved
 when the requested family does not offer that level.
 
 Usage and token fields: responses may include `usage` token fields (`prompt_tokens`/`completion_tokens` for Chat Completions, `input_tokens`/`output_tokens` for Responses). These are heuristic estimates (character count ÷ 4), not Cursor billing meters. Do not use them for invoicing.
+
+### Codex custom provider
+
+Codex uses Responses API custom tools for its shell and patch operations. Enable
+ACP so the proxy can pass those tool calls back to Codex:
+
+```powershell
+$env:CURSOR_BRIDGE_USE_ACP = "true"
+npm start
+```
+
+Then register the local proxy in `~/.codex/config.toml`:
+
+```toml
+model_provider = "cursor"
+model = "gpt-5.6-sol"
+
+[model_providers.cursor]
+name = "Cursor API Proxy"
+base_url = "http://127.0.0.1:8765/v1"
+wire_api = "responses"
+requires_openai_auth = false
+```
+
+The Responses adapter supports both `function` and raw-input `custom` tools,
+including streaming `custom_tool_call` events and stateless `store=false`
+continuations correlated by `call_id`.
 
 ## Environment variables
 

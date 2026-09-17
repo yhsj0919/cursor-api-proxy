@@ -2,6 +2,7 @@ export type ClientToolDefinition = {
   name: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  responseType?: "function" | "custom";
 };
 
 export type ClientToolOutput = {
@@ -15,6 +16,7 @@ export type PendingClientToolCall = {
   itemId: string;
   name: string;
   arguments: string;
+  responseType?: "function" | "custom";
 };
 
 export type ResolvedToolChoice = {
@@ -69,12 +71,35 @@ export function parseOpenAiFunctionTools(
   for (const value of tools ?? []) {
     const tool = asRecord(value);
     if (!tool) throw new Error("Invalid tool definition");
-    if (tool.type !== "function") {
+    if (tool.type !== "function" && tool.type !== "custom") {
       throw new Error(
         `Unsupported tool type: ${
           typeof tool.type === "string" ? tool.type : "unknown"
         }`,
       );
+    }
+    if (tool.type === "custom") {
+      if (typeof tool.name !== "string") {
+        throw new Error("Custom tool is missing name");
+      }
+      pushUnique(out, seen, {
+        name: tool.name,
+        description:
+          typeof tool.description === "string" ? tool.description : undefined,
+        inputSchema: {
+          type: "object",
+          properties: {
+            input: {
+              type: "string",
+              description: "Raw input for this custom tool",
+            },
+          },
+          required: ["input"],
+          additionalProperties: false,
+        },
+        responseType: "custom",
+      });
+      continue;
     }
     const wrapped = asRecord(tool.function);
     const fn = wrapped ?? tool;
@@ -219,9 +244,15 @@ export function responsesToolOutputs(input: unknown): ClientToolOutput[] {
   const outputs: ClientToolOutput[] = [];
   for (const value of input) {
     const item = asRecord(value);
-    if (!item || item.type !== "function_call_output") continue;
+    if (
+      !item ||
+      (item.type !== "function_call_output" &&
+        item.type !== "custom_tool_call_output")
+    ) {
+      continue;
+    }
     if (typeof item.call_id !== "string" || !item.call_id) {
-      throw new Error("function_call_output is missing call_id");
+      throw new Error(`${String(item.type)} is missing call_id`);
     }
     outputs.push({
       callId: item.call_id,

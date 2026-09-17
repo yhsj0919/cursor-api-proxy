@@ -56,6 +56,7 @@ export class ClientToolBridge {
 
   readonly #definitions: ClientToolDefinition[];
   readonly #definitionNames: Set<string>;
+  readonly #definitionsByName: Map<string, ClientToolDefinition>;
   readonly #token = randomBytes(32).toString("base64url");
   readonly #path = `/mcp/${randomUUID()}`;
   readonly #mcp: Server;
@@ -71,6 +72,9 @@ export class ClientToolBridge {
   constructor(definitions: readonly ClientToolDefinition[]) {
     this.#definitions = [...definitions];
     this.#definitionNames = new Set(definitions.map((tool) => tool.name));
+    this.#definitionsByName = new Map(
+      definitions.map((tool) => [tool.name, tool]),
+    );
     this.serverName = `cursor-api-proxy-${randomUUID().slice(0, 8)}`;
 
     this.#mcp = new Server(
@@ -103,10 +107,15 @@ export class ClientToolBridge {
       }
 
       const callId = `call_${randomUUID().replace(/-/g, "")}`;
-      const itemId = `fc_${randomUUID().replace(/-/g, "")}`;
+      const definition = this.#definitionsByName.get(name);
+      const responseType = definition?.responseType ?? "function";
+      const itemId = `${responseType === "custom" ? "ct" : "fc"}_${randomUUID().replace(/-/g, "")}`;
       let argumentsJson = "{}";
       try {
-        argumentsJson = JSON.stringify(args ?? {});
+        argumentsJson =
+          responseType === "custom" && typeof args?.input === "string"
+            ? args.input
+            : JSON.stringify(args ?? {});
       } catch {
         throw new McpError(
           ErrorCode.InvalidParams,
@@ -121,6 +130,7 @@ export class ClientToolBridge {
           itemId,
           name,
           arguments: argumentsJson,
+          responseType,
           exposed: false,
           resolve,
           reject,
@@ -208,11 +218,12 @@ export class ClientToolBridge {
 
   pendingCalls(): PendingClientToolCall[] {
     return [...this.#pending.values()].map(
-      ({ callId, itemId, name, arguments: args }) => ({
+      ({ callId, itemId, name, arguments: args, responseType }) => ({
         callId,
         itemId,
         name,
         arguments: args,
+        responseType,
       }),
     );
   }
@@ -220,11 +231,12 @@ export class ClientToolBridge {
   unexposedCalls(): PendingClientToolCall[] {
     return [...this.#pending.values()]
       .filter((call) => !call.exposed)
-      .map(({ callId, itemId, name, arguments: args }) => ({
+      .map(({ callId, itemId, name, arguments: args, responseType }) => ({
         callId,
         itemId,
         name,
         arguments: args,
+        responseType,
       }));
   }
 

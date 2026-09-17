@@ -82,6 +82,16 @@ export type ResponsesCtx = {
 type ResponseStatus = "in_progress" | "completed" | "failed";
 
 function functionCallItem(call: PendingClientToolCall) {
+  if (call.responseType === "custom") {
+    return {
+      id: call.itemId,
+      type: "custom_tool_call",
+      status: "completed",
+      call_id: call.callId,
+      name: call.name,
+      input: call.arguments,
+    };
+  }
   return {
     id: call.itemId,
     type: "function_call",
@@ -274,21 +284,24 @@ async function writeStructuredResponseTurn(opts: {
   }
   if (result.status === "tool_calls") {
     for (const call of result.toolCalls) {
+      const custom = call.responseType === "custom";
       writeResponseEvent(opts.res, "response.output_item.added", {
         response_id: opts.id,
         output_index: outputIndex,
         item: {
           id: call.itemId,
-          type: "function_call",
+          type: custom ? "custom_tool_call" : "function_call",
           status: "in_progress",
           call_id: call.callId,
           name: call.name,
-          arguments: "",
+          ...(custom ? { input: "" } : { arguments: "" }),
         },
       });
       writeResponseEvent(
         opts.res,
-        "response.function_call_arguments.delta",
+        custom
+          ? "response.custom_tool_call_input.delta"
+          : "response.function_call_arguments.delta",
         {
           response_id: opts.id,
           item_id: call.itemId,
@@ -298,12 +311,16 @@ async function writeStructuredResponseTurn(opts: {
       );
       writeResponseEvent(
         opts.res,
-        "response.function_call_arguments.done",
+        custom
+          ? "response.custom_tool_call_input.done"
+          : "response.function_call_arguments.done",
         {
           response_id: opts.id,
           item_id: call.itemId,
           output_index: outputIndex,
-          arguments: call.arguments,
+          ...(custom
+            ? { input: call.arguments }
+            : { arguments: call.arguments }),
         },
       );
       writeResponseEvent(opts.res, "response.output_item.done", {
@@ -477,38 +494,6 @@ export async function handleResponses(
     });
     return;
   }
-  if (config.useAcp && submittedToolOutputs.length > 0) {
-    if (
-      Array.isArray(body.input) &&
-      body.input.some(
-        (item) =>
-          !item ||
-          typeof item !== "object" ||
-          (item as { type?: unknown }).type !== "function_call_output",
-      )
-    ) {
-      json(res, 400, {
-        error: {
-          message:
-            "A function_call_output resume cannot include other input item types",
-          code: "invalid_tool_resume",
-          type: "invalid_request_error",
-        },
-      });
-      return;
-    }
-    if (body.instructions != null) {
-      json(res, 400, {
-        error: {
-          message:
-            "instructions cannot change while an ACP tool turn is active",
-          code: "invalid_tool_resume",
-          type: "invalid_request_error",
-        },
-      });
-      return;
-    }
-  }
   const ownerKey = toolSessionOwnerKey(req, remoteAddress);
   const requested = normalizeModelId(body.model);
   const model = resolveModel(requested, lastRequestedModelRef, config);
@@ -553,17 +538,6 @@ export async function handleResponses(
     config.useAcp &&
     selectedTools.length > 0 &&
     submittedToolOutputs.length === 0;
-  if (structuredToolStart && body.store === false) {
-    json(res, 400, {
-      error: {
-        message:
-          "store=false is incompatible with stateful ACP tool passthrough",
-        code: "invalid_store",
-        type: "invalid_request_error",
-      },
-    });
-    return;
-  }
   const toolsText = structuredToolStart
     ? undefined
     : body.tool_choice === "none"
@@ -591,10 +565,17 @@ export async function handleResponses(
 
   if (config.useAcp && submittedToolOutputs.length > 0) {
     const previousResponseId = body.previous_response_id;
-    const record =
+    const recordByResponse =
       typeof previousResponseId === "string"
         ? ctx.toolSessions.findByResponseId(ownerKey, previousResponseId)
         : undefined;
+    const record =
+      recordByResponse ??
+      ctx.toolSessions.findByCallIds(
+        "responses",
+        ownerKey,
+        submittedToolOutputs.map((output) => output.callId),
+      );
     if (
       !record ||
       record.api !== "responses" ||

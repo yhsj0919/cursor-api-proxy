@@ -65,6 +65,40 @@ describe("resolveModelForExecution", () => {
     expect(decision.fallbackUsed).toBe(false);
   });
 
+  it("maps Claude thinking families whose effort precedes the thinking suffix", () => {
+    const decision = resolveModelForExecution({
+      requested: "claude-4.6-opus-thinking",
+      reasoningEffort: "max",
+      defaultModel: "auto",
+      availableCursorIds: [
+        "auto",
+        "claude-4.6-opus-high-thinking",
+        "claude-4.6-opus-max-thinking",
+      ],
+    });
+    expect(decision.final).toBe("claude-4.6-opus-max-thinking");
+  });
+
+  it("keeps Cursor auto when Codex supplies a reasoning effort", () => {
+    const decision = resolveModelForExecution({
+      requested: "auto",
+      reasoningEffort: "low",
+      defaultModel: "auto",
+      availableCursorIds: ["auto", "gpt-5.6-sol-low"],
+    });
+    expect(decision.final).toBe("auto");
+  });
+
+  it("keeps a non-reasoning model when Codex supplies an inherited effort", () => {
+    const decision = resolveModelForExecution({
+      requested: "composer-2.5",
+      reasoningEffort: "low",
+      defaultModel: "auto",
+      availableCursorIds: ["auto", "composer-2.5"],
+    });
+    expect(decision.final).toBe("composer-2.5");
+  });
+
   it("replaces an explicit effort while preserving the fast variant", () => {
     const decision = resolveModelForExecution({
       requested: "gpt-5.6-sol-high-fast",
@@ -103,10 +137,10 @@ describe("resolveModelForExecution", () => {
   it("rejects a reasoning effort unavailable for the requested family", () => {
     expect(() =>
       resolveModelForExecution({
-        requested: "composer-2.5",
-        reasoningEffort: "high",
+        requested: "gpt-5.6-sol",
+        reasoningEffort: "low",
         defaultModel: "auto",
-        availableCursorIds: ["auto", "composer-2.5"],
+        availableCursorIds: ["auto", "gpt-5.6-sol-high"],
       }),
     ).toThrow(UnsupportedReasoningEffortError);
   });

@@ -68,6 +68,40 @@ describe("tool normalization", () => {
     ).toThrow(/Duplicate/);
   });
 
+  it("accepts Responses custom tools as raw-input MCP tools", () => {
+    expect(
+      parseOpenAiFunctionTools([
+        {
+          type: "custom",
+          name: "apply_patch",
+          description: "Apply a patch",
+          format: {
+            type: "grammar",
+            syntax: "lark",
+            definition: "start: /.+/",
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        name: "apply_patch",
+        description: "Apply a patch",
+        inputSchema: {
+          type: "object",
+          properties: {
+            input: {
+              type: "string",
+              description: "Raw input for this custom tool",
+            },
+          },
+          required: ["input"],
+          additionalProperties: false,
+        },
+        responseType: "custom",
+      },
+    ]);
+  });
+
   it("implements none, required, named, and no-parallel choices", () => {
     const tools = [
       {
@@ -117,6 +151,18 @@ describe("tool output correlation", () => {
         },
       ]),
     ).toEqual([{ callId: "call_2", output: "done" }]);
+  });
+
+  it("reads Responses custom_tool_call_output", () => {
+    expect(
+      responsesToolOutputs([
+        {
+          type: "custom_tool_call_output",
+          call_id: "call_custom",
+          output: "done",
+        },
+      ]),
+    ).toEqual([{ callId: "call_custom", output: "done" }]);
   });
 
   it("reads Anthropic tool_result and error state", () => {

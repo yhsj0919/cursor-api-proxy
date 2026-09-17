@@ -34,6 +34,16 @@ describe("extractAcpUpdateText", () => {
 });
 
 describe("resolveAcpModelConfigValue", () => {
+  it("maps Auto to the ACP session default", () => {
+    expect(
+      resolveAcpModelConfigValue("Auto", [
+        { modelId: "gpt-4[]", name: "GPT-4" },
+      ]),
+    ).toBe("default[]");
+  });
+});
+
+describe("resolveAcpModelConfigValue", () => {
   it("returns display name when catalog is missing", () => {
     expect(resolveAcpModelConfigValue("gpt-4", undefined)).toBe("gpt-4");
   });

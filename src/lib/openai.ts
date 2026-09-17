@@ -135,16 +135,21 @@ export function responsesInputToMessages(
       continue;
     }
 
-    if (item.type === "function_call_output") {
+    if (
+      item.type === "function_call_output" ||
+      item.type === "custom_tool_call_output"
+    ) {
       const output = responseItemContentToText(item.output ?? item.content);
       if (output) messages.push({ role: "tool", content: output });
       continue;
     }
 
-    if (item.type === "function_call") {
+    if (item.type === "function_call" || item.type === "custom_tool_call") {
       const name = typeof item.name === "string" ? item.name : "function";
       const args =
-        typeof item.arguments === "string"
+        typeof item.input === "string"
+          ? item.input
+          : typeof item.arguments === "string"
           ? item.arguments
           : JSON.stringify(item.arguments ?? {});
       messages.push({

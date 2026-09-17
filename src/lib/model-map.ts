@@ -175,9 +175,15 @@ function resolveReasoningModel(args: {
   const { base: withoutFast, fast } = splitFastSuffix(args.model);
   const base = stripEffortSuffix(withoutFast);
   for (const suffix of effortSuffixCandidates(args.effort)) {
-    const candidate = `${base}-${suffix}${fast ? "-fast" : ""}`;
-    const matched = matchAvailableModel(candidate, args.availableCursorIds);
-    if (matched) return matched;
+    const candidates = [`${base}-${suffix}${fast ? "-fast" : ""}`];
+    if (base.toLowerCase().endsWith("-thinking")) {
+      const stem = base.slice(0, -"-thinking".length);
+      candidates.push(`${stem}-${suffix}-thinking${fast ? "-fast" : ""}`);
+    }
+    for (const candidate of candidates) {
+      const matched = matchAvailableModel(candidate, args.availableCursorIds);
+      if (matched) return matched;
+    }
   }
   return undefined;
 }
@@ -202,12 +208,45 @@ export function resolveModelForExecution(args: {
     );
   }
 
+  const matchedMapped = matchAvailableModel(mapped, args.availableCursorIds);
+
+  // Cursor's `auto` chooses its own route, so a reasoning value inherited from
+  // Codex must not turn it into an invalid `auto-<effort>` model id.
+  if (mapped === "auto" && matchedMapped) {
+    return {
+      requested,
+      mapped,
+      final: matchedMapped,
+      reasoningEffort,
+      requestedWasDefault,
+      validated: true,
+      fallbackUsed: false,
+    };
+  }
+
   if (reasoningEffort) {
     const reasoningModel = resolveReasoningModel({
       model: mapped,
       effort: reasoningEffort,
       availableCursorIds: args.availableCursorIds,
     });
+    if (
+      !reasoningModel &&
+      matchedMapped &&
+      /^composer(?:-|$)/i.test(mapped)
+    ) {
+      // Composer does not expose Cursor effort variants, so keep its exact id
+      // when Codex supplies an inherited effort.
+      return {
+        requested,
+        mapped,
+        final: matchedMapped,
+        reasoningEffort,
+        requestedWasDefault,
+        validated: true,
+        fallbackUsed: false,
+      };
+    }
     if (!reasoningModel) {
       throw new UnsupportedReasoningEffortError(mapped, reasoningEffort);
     }
@@ -233,7 +272,6 @@ export function resolveModelForExecution(args: {
     };
   }
 
-  const matchedMapped = matchAvailableModel(mapped, args.availableCursorIds);
   if (matchedMapped) {
     return {
       requested,
